@@ -1,10 +1,22 @@
 import mysql.connector
-from datetime import date
 import os
+import re
+import time
+from datetime import date
+from dotenv import load_dotenv
+
+
+load_dotenv()
+
 
 # falta colocar classe livro, usuario e empréstimo
 # lembrar de retirar essas informações quando fizer push para o github
-
+conn = mysql.connector.connect (
+    host=os.getenv("DB_HOST"), 
+    user=os.getenv("DB_USER"), 
+    password=os.getenv("DB_PASSWORD"), 
+    database=os.getenv("DB_DATABASE")
+)
 
 class Livro:
     def __init__(self, id, titulo, autor, ano, isbn, status):
@@ -15,40 +27,52 @@ class Livro:
         self.isbn = isbn
         self.status = status
 
+class Usuario: 
+    def __init__(self, id, nome, matricula, email):
+        self.id = id
+        self.nome = nome
+        self.matricula = matricula
+        self.email = email
+        
+
 class Biblioteca:
     # classe contrutora responsável pela conexão com o banco
     def __init__(self, conn=None):
         self.conn = conn
 
-    # classe responsável por pesquisar o nome do usuário pelo email
-    def _pesquisarUsuarioPeloNome(self, nome):
+    # método responsável por pesquisar livro por titulo || ano
+    def _pesquisarLivroPorAno(self, ano):
         cursor = self.conn.cursor()
-        sql = "SELECT * FROM usuario WHERE nome = %s"
-        cursor.execute(sql, (nome, ))
+        sql = "SELECT * FROM livro WHERE ano = %s"
+        cursor.execute(sql, (ano, ))
         resultadoPesquisa = cursor.fetchall()
 
         print(resultadoPesquisa)
 
-        if not resultadoPesquisa:
-            print("Nenhum usuário com esse nome foi encontrado!")
-            return 
-        
-        print("O usuário foi encontrado, abaixo estão algumas informações dele!")
-        print(f"Nome do usuario | Matrícula do usuário | E-mail do usuário")
-        for linha in resultadoPesquisa:
-            print(f"{linha[1]} | {linha[2]} | {linha[3]}")
-
-    def _listarUsuarios(self):
+    def _pesquisarLivroPorTitulo(self, titulo):
         cursor = self.conn.cursor()
-        cursor.execute("""
-            SELECT * FROM usuario;
-        """)
-        resultados = cursor.fetchall()
+        sql = "SELECT * FROM livro WHERE titulo = %s"
+        cursor.execute(sql, (titulo, ))
+        resultadoPesquisa = cursor.fetchall()
 
-        print(f"Nome do usuario | Matrícula do usuário | E-mail do usuário")
+        print(resultadoPesquisa)
+    
+    # def _pesquisarUsuarioPeloNome(self, nome):
+    #     cursor = self.conn.cursor()
+    #     sql = "SELECT * FROM usuario WHERE nome = %s"
+    #     cursor.execute(sql, (nome, ))
+    #     resultadoPesquisa = cursor.fetchall()
+
+    #     print(resultadoPesquisa)
+
+    #     if not resultadoPesquisa:
+    #         print("Nenhum usuário com esse nome foi encontrado!")
+    #         return 
         
-        for linha in resultados:
-            print(f"{linha[1]} | {linha[2]} | {linha[3]}")
+    #     print("O usuário foi encontrado, abaixo estão algumas informações dele!")
+    #     print(f"Nome do usuario | Matrícula do usuário | E-mail do usuário")
+    #     for linha in resultadoPesquisa:
+    #         print(f"{linha[1]} | {linha[2]} | {linha[3]}")
 
     def _listarLivros(self):
         cursor = self.conn.cursor()
@@ -96,36 +120,50 @@ class Biblioteca:
         else: 
             os.system('clear')
     
-    
+def email_matches (email):
+    regex = r'^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$'
+
+    if re.fullmatch(regex, email): 
+        return True
+    else:
+        return False
+
 opcao = 0
 
 biblioteca1 = Biblioteca(conn=conn)
 
-while opcao != 7:
+while opcao != 6:
     print("1 - Adicionar um usuário")
-    print("2 - Listar os usuários")
-    print("3 - Adicionar um livro")
-    print("4 - Listar os livros")
-    print("5 - Procurar usuário pelo nome")
+    print("2 - Adicionar um livro")
+    print("3 - Listar os livros")
+    print("4 - Procurar livros por ano")
+    print("5 - Procurar livros por título")
     print("6 - Limpar tela do console")
     print("7 - Sair")
-    opcao = int(input("digite aqui sua opcao:"))
+    opcao = int(input("Digite aqui sua opcao:"))
 
     if opcao == 1:
+
         # pega os valores de nome, matricula e email digitados e insere para o usuário
         nome = input("Digite o nome do usuário:")
         matricula = input("Digite a matrícula:")
         email = input("Digite o e-mail:")
 
-        biblioteca1._adicionarUsuario(nome, matricula, email)
+        result = email_matches(email)
 
-        print(f"O usuário {nome} foi inserido com sucesso!\n")
+        if result == False:
+            
+            print("Ocorreu um erro ao validar o E-mail fornecido, tenha certeza que ele segue esse padrão (email@email.com)")
+            input("Pressione Enter para continuar...")
+            biblioteca1.limparTela()
+        elif result == True:
+            biblioteca1._adicionarUsuario(nome, matricula, email)
 
+            print(f"O usuário {nome} foi criado com sucesso!")
+            input("Pressione Enter para continuar...")
+            biblioteca1.limparTela()
+        
     elif opcao == 2: 
-        # lista todos os usuários que estiverem criados no banco
-        biblioteca1._listarUsuarios()
-
-    elif opcao == 3:
         # pega os valores de titulo, autor, ano, isbn, status e adiciona ao banco
         titulo = input("Digite o título do livro:")
         autor = input("Digite o autor do livro:")
@@ -136,17 +174,22 @@ while opcao != 7:
         biblioteca1._adicionarLivro(titulo, autor, ano, isbn, status)
 
         print(f"O livro {titulo} foi inserido com sucesso!\n")
-    elif opcao == 4:
+        
+
+    elif opcao == 3:
         # lista todos os livros que estiverem criados no banco
         biblioteca1._listarLivros()
-    elif opcao == 5:
-        nome_buscado = input("Digite aqui o nome do usuário para saber se ele existe:")
-        biblioteca1._pesquisarUsuarioPeloNome(nome_buscado)
-    elif opcao == 6:
+        input("Pressione Enter para continuar...")
         Biblioteca.limparTela()
-
-
-
+        
+    elif opcao == 4:
+        ano = input("Digite aqui o ano para efetuar a busca:")
+        biblioteca1._pesquisarLivroPorAno(ano)
+    elif opcao == 5:
+        titulo = input("Digite aqui o título para efetuar a busca:")
+        biblioteca1._pesquisarLivroPorTitulo(titulo)
+    elif opcao == 6: 
+        Biblioteca.limparTela()
 
 # biblioteca1._adicionarLivro("Pequeno Principe", "Autor Desconhecido", 1975, "8522031452", True)
 # biblioteca1._adicionarUsuario("usuario1", "a101", "usuario1@email.com")

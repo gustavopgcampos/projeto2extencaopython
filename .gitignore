@@ -1,0 +1,5 @@
+# env archives
+.env
+
+# venv archives
+venv/
