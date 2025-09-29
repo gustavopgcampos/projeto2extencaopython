@@ -1,16 +1,12 @@
 import mysql.connector
 import os
 import re
-import time
-from datetime import date
+from datetime import date, timedelta
 from dotenv import load_dotenv
 
 
 load_dotenv()
 
-
-# falta colocar classe livro, usuario e empréstimo
-# lembrar de retirar essas informações quando fizer push para o github
 conn = mysql.connector.connect (
     host=os.getenv("DB_HOST"), 
     user=os.getenv("DB_USER"), 
@@ -81,10 +77,10 @@ class Biblioteca:
         """)
         resultados = cursor.fetchall()
 
-        print(f"Título do livro | Autor do livro | Ano do livro | ISBN do livro | Status do livro")
+        print(f" ID | Título do livro | Autor do livro | Ano do livro | ISBN do livro | Status do livro")
 
         for linha in resultados: 
-            print(f"{linha[1]} | {linha[2]} | {linha[3]} | {linha[4]} | {linha[5]}")
+            print(f" {linha[0]} | {linha[1]} | {linha[2]} | {linha[3]} | {linha[4]} | {linha[5]}")
 
     def _listarEmprestimos(self):
         cursor = self.conn.cursor()
@@ -107,11 +103,60 @@ class Biblioteca:
         cursor.execute(sql, (nome, matricula, email))
         self.conn.commit()
 
-    def _adicionarEmprestimo(self, data_retirada, data_devolucao_prevista, data_revolucao_real, stats, livro_id, usuario_id):
+    def _adicionarEmprestimo(self, livro_id, usuario_id):
+
+        data = date.today()
+        dataPrevista = data + timedelta(days=7)
+        status = "N"
+
         cursor = self.conn.cursor()
-        sql = "INSERT INTO emprestimo (data_retirada, data_devolucao_prevista, data_revolucao_real, stats, livro_id, usuario_id) VALUES (%s, %s, %s, %s, %s, %s)"
-        cursor.execute(sql, (data_retirada, data_devolucao_prevista, data_revolucao_real, stats, livro_id, usuario_id))
-        self.conn.commit()
+        sql3 = "select stats from livro where id = %s"
+        cursor.execute(sql3, (livro_id, ))
+        resultado = cursor.fetchone()
+
+        resultado_string = ''.join(resultado)
+
+        if resultado_string == "Y": 
+            cursor = self.conn.cursor()
+            sql = "INSERT INTO emprestimo (data_retirada, data_devolucao_prevista, stats, livro_id, usuario_id) VALUES (%s, %s, %s, %s, %s)"
+            sql2 = "UPDATE livro SET stats = %s WHERE id = %s"
+            cursor.execute(sql, (data, dataPrevista, status, livro_id, usuario_id, ))
+            cursor.execute(sql2, (status, livro_id, ))
+            self.conn.commit()
+        elif resultado_string == "N": 
+            print("O livro já está em outro empréstimo")
+
+    def _registrarDevolucao(self, livro):
+        status = "Y"
+
+        cursor = self.conn.cursor()
+        sql = "SELECT stats FROM livro WHERE id = %s"
+        cursor.execute(sql, (livro, ))
+        resultados = cursor.fetchone()
+        resultado_string = ''.join(resultados)
+
+        # 
+        if resultado_string == "N":
+            # ao registrar uma devolucao preciso voltar o status do livro para Y e registrar a data de devolução do empréstimo
+            cursor = self.conn.cursor()
+            sql = "UPDATE livro SET stats = %s WHERE id = %s"
+            cursor.execute(sql, (status, livro))
+            self.conn.commit()
+
+            print("livro devolvido com sucesso!")
+        else: 
+            print("O livro citado não se encontra em um empréstimo!")
+
+    def _listarEmprestimosAtivos (self): 
+        cursor = self.conn.cursor()
+        cursor.execute("""
+            SELECT * FROM emprestimo
+        """)
+        emprestimos = cursor.fetchall()
+
+        for linhas in emprestimos:
+            print(linhas)
+
 
     @staticmethod
     def limparTela():
@@ -132,14 +177,17 @@ opcao = 0
 
 biblioteca1 = Biblioteca(conn=conn)
 
-while opcao != 6:
+while opcao != 10:
     print("1 - Adicionar um usuário")
     print("2 - Adicionar um livro")
     print("3 - Listar os livros")
     print("4 - Procurar livros por ano")
     print("5 - Procurar livros por título")
-    print("6 - Limpar tela do console")
-    print("7 - Sair")
+    print("6 - Registrar empréstimo")
+    print("7 - Registrar devolução")
+    print("8 - Listar empréstimos ativos")
+    print("9 - Limpar tela do console")
+    print("10 - Sair")
     opcao = int(input("Digite aqui sua opcao:"))
 
     if opcao == 1:
@@ -178,6 +226,7 @@ while opcao != 6:
 
     elif opcao == 3:
         # lista todos os livros que estiverem criados no banco
+        Biblioteca.limparTela()
         biblioteca1._listarLivros()
         input("Pressione Enter para continuar...")
         Biblioteca.limparTela()
@@ -188,7 +237,25 @@ while opcao != 6:
     elif opcao == 5:
         titulo = input("Digite aqui o título para efetuar a busca:")
         biblioteca1._pesquisarLivroPorTitulo(titulo)
-    elif opcao == 6: 
+    elif opcao == 6:
+        livro = int(input("Digite o ID do livro a ser inserido no empréstimo:"))
+        usuario = int(input("Digite o ID do usuário a ser inserido no empréstimo:"))
+
+        biblioteca1._adicionarEmprestimo(livro, usuario)
+        input("Pressione Enter para continuar...")
+        Biblioteca.limparTela()
+    elif opcao == 7:
+        livro = int(input("Digite o ID do livro a ser devolvido:"))
+        biblioteca1._registrarDevolucao(livro)
+        input("Pressione Enter para continuar...")
+        Biblioteca.limparTela()
+    elif opcao == 8: 
+        Biblioteca.limparTela()
+        print("ID | | Data da retirada | Data da devolução | Data da devolução real | Status | ID do livro | ID do usuário")
+        biblioteca1._listarEmprestimosAtivos()
+        input("Pressione Enter para continuar...")
+        Biblioteca.limparTela()
+    elif opcao == 9: 
         Biblioteca.limparTela()
 
 # biblioteca1._adicionarLivro("Pequeno Principe", "Autor Desconhecido", 1975, "8522031452", True)
