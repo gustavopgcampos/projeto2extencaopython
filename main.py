@@ -38,12 +38,19 @@ class Biblioteca:
 
     # método responsável por pesquisar livro por titulo || ano
     def _pesquisarLivroPorAno(self, ano):
-        cursor = self.conn.cursor()
-        sql = "SELECT * FROM livro WHERE ano = %s"
-        cursor.execute(sql, (ano, ))
-        resultadoPesquisa = cursor.fetchall()
+        try:
+            cursor = self.conn.cursor()
+            sql = "SELECT * FROM livro WHERE ano = %s"
+            cursor.execute(sql, (ano, ))
+            resultadoPesquisa = cursor.fetchall()
+        
+            if not resultadoPesquisa:
+                print("Não foi encontrado nenhum livro referente ao ano.")
+            else: 
+                print(str(resultadoPesquisa))
 
-        print(resultadoPesquisa)
+        except Exception as error:
+            print("Error", error)
 
     def _pesquisarLivroPorTitulo(self, titulo):
         cursor = self.conn.cursor()
@@ -51,24 +58,10 @@ class Biblioteca:
         cursor.execute(sql, (titulo, ))
         resultadoPesquisa = cursor.fetchall()
 
-        print(resultadoPesquisa)
-    
-    # def _pesquisarUsuarioPeloNome(self, nome):
-    #     cursor = self.conn.cursor()
-    #     sql = "SELECT * FROM usuario WHERE nome = %s"
-    #     cursor.execute(sql, (nome, ))
-    #     resultadoPesquisa = cursor.fetchall()
-
-    #     print(resultadoPesquisa)
-
-    #     if not resultadoPesquisa:
-    #         print("Nenhum usuário com esse nome foi encontrado!")
-    #         return 
-        
-    #     print("O usuário foi encontrado, abaixo estão algumas informações dele!")
-    #     print(f"Nome do usuario | Matrícula do usuário | E-mail do usuário")
-    #     for linha in resultadoPesquisa:
-    #         print(f"{linha[1]} | {linha[2]} | {linha[3]}")
+        if not resultadoPesquisa:
+            print("Não foi encontrado nenhum livro referente ao título.")
+        else: 
+            print(resultadoPesquisa)
 
     def _listarLivros(self):
         cursor = self.conn.cursor()
@@ -108,55 +101,77 @@ class Biblioteca:
         data = date.today()
         dataPrevista = data + timedelta(days=7)
         status = "N"
+        status_yes = "Y"
 
         cursor = self.conn.cursor()
-        sql3 = "select stats from livro where id = %s"
-        cursor.execute(sql3, (livro_id, ))
-        resultado = cursor.fetchone()
+        sqla = "SELECT * FROM emprestimo WHERE usuario_id = %s AND stats = %s"
+        cursor.execute(sqla, (usuario_id, status_yes, ))
+        res = cursor.fetchone()
 
-        resultado_string = ''.join(resultado)
-
-        if resultado_string == "Y": 
+        if res is None:
             cursor = self.conn.cursor()
-            sql = "INSERT INTO emprestimo (data_retirada, data_devolucao_prevista, stats, livro_id, usuario_id) VALUES (%s, %s, %s, %s, %s)"
-            sql2 = "UPDATE livro SET stats = %s WHERE id = %s"
-            cursor.execute(sql, (data, dataPrevista, status, livro_id, usuario_id, ))
-            cursor.execute(sql2, (status, livro_id, ))
-            self.conn.commit()
-        elif resultado_string == "N": 
-            print("O livro já está em outro empréstimo")
+            sql3 = "SELECT stats FROM livro WHERE id = %s"
+            cursor.execute(sql3, (livro_id, ))
+            resultado = cursor.fetchone()
+
+            resultado_string = ''.join(resultado)
+
+            # quando adiciona um empréstimo coloca o status do empréstimo para Y e do livro para N
+            if resultado_string == "Y": 
+                cursor = self.conn.cursor()
+                sql = "INSERT INTO emprestimo (data_retirada, data_devolucao_prevista, stats, livro_id, usuario_id) VALUES (%s, %s, %s, %s, %s)"
+                sql2 = "UPDATE livro SET stats = %s WHERE id = %s"
+                cursor.execute(sql, (data, dataPrevista, status_yes, livro_id, usuario_id, ))
+                cursor.execute(sql2, (status, livro_id, ))
+                self.conn.commit()
+            elif resultado_string == "N": 
+                print("O livro já está em outro empréstimo")
+        else: 
+            print("O usuário já possui um empréstimo ativo!") 
+            
 
     def _registrarDevolucao(self, livro):
+        data = date.today()
         status = "Y"
+        status_no = "N"
 
         cursor = self.conn.cursor()
         sql = "SELECT stats FROM livro WHERE id = %s"
         cursor.execute(sql, (livro, ))
         resultados = cursor.fetchone()
         resultado_string = ''.join(resultados)
-
-        # 
+ 
         if resultado_string == "N":
             # ao registrar uma devolucao preciso voltar o status do livro para Y e registrar a data de devolução do empréstimo
             cursor = self.conn.cursor()
             sql = "UPDATE livro SET stats = %s WHERE id = %s"
+            sql2 = "UPDATE emprestimo SET stats = %s WHERE livro_id = %s"
+            sql3 = "UPDATE emprestimo SET data_devolucao_real = %s WHERE livro_id = %s AND stats = %s"
             cursor.execute(sql, (status, livro))
+            cursor.execute(sql3, (data, livro, status, ))
+            cursor.execute(sql2, (status_no, livro, ))
             self.conn.commit()
 
             print("livro devolvido com sucesso!")
         else: 
             print("O livro citado não se encontra em um empréstimo!")
 
-    def _listarEmprestimosAtivos (self): 
+    # arrumar para listar apenas os emprestimos que estão com Y (ativos)
+    def _listarEmprestimosAtivos(self): 
         cursor = self.conn.cursor()
         cursor.execute("""
-            SELECT * FROM emprestimo
+            SELECT e.id, e.data_retirada, e.data_devolucao_prevista, e.data_devolucao_real, 
+                e.stats, l.titulo, u.nome
+            FROM emprestimo e
+            INNER JOIN livro l ON e.livro_id = l.id
+            INNER JOIN usuario u ON e.usuario_id = u.id
+            WHERE e.stats = 'Y'
         """)
         emprestimos = cursor.fetchall()
 
-        for linhas in emprestimos:
-            print(linhas)
-
+        print("ID | Retirada | Prevista | Devolução Real | Status | Livro | Usuário")
+        for linha in emprestimos:
+            print(f"{linha[0]} | {linha[1]} | {linha[2]} | {linha[3]} | {linha[4]} | {linha[5]} | {linha[6]}")
 
     @staticmethod
     def limparTela():
@@ -181,14 +196,18 @@ while opcao != 10:
     print("1 - Adicionar um usuário")
     print("2 - Adicionar um livro")
     print("3 - Listar os livros")
+    print("3 - Listar os usuários") #
     print("4 - Procurar livros por ano")
     print("5 - Procurar livros por título")
     print("6 - Registrar empréstimo")
     print("7 - Registrar devolução")
     print("8 - Listar empréstimos ativos")
     print("9 - Limpar tela do console")
+    print("10 - Gerar relatórios de empréstimos") #
     print("10 - Sair")
     opcao = int(input("Digite aqui sua opcao:"))
+
+    biblioteca1.limparTela()
 
     if opcao == 1:
 
@@ -234,9 +253,13 @@ while opcao != 10:
     elif opcao == 4:
         ano = input("Digite aqui o ano para efetuar a busca:")
         biblioteca1._pesquisarLivroPorAno(ano)
+        input("Pressione Enter para continuar...")
+        Biblioteca.limparTela()
     elif opcao == 5:
         titulo = input("Digite aqui o título para efetuar a busca:")
         biblioteca1._pesquisarLivroPorTitulo(titulo)
+        input("Pressione Enter para continuar...")
+        Biblioteca.limparTela()
     elif opcao == 6:
         livro = int(input("Digite o ID do livro a ser inserido no empréstimo:"))
         usuario = int(input("Digite o ID do usuário a ser inserido no empréstimo:"))
@@ -251,7 +274,6 @@ while opcao != 10:
         Biblioteca.limparTela()
     elif opcao == 8: 
         Biblioteca.limparTela()
-        print("ID | | Data da retirada | Data da devolução | Data da devolução real | Status | ID do livro | ID do usuário")
         biblioteca1._listarEmprestimosAtivos()
         input("Pressione Enter para continuar...")
         Biblioteca.limparTela()
